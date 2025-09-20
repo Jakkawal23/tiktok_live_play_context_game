@@ -1,5 +1,4 @@
-TikTokLive
-pyautogui
-selenium
-pynput
-PyQt5
+PyQt5==5.15.9
+TikTokLive==0.1.0
+pynput==1.7.6
+selenium==4.15.2

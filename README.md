@@ -80,3 +80,28 @@ python main_pyautogui_gui.py
 ```bash
 python main_selenium.py
 ```
+
+## ทำเป็นไฟล์ exe
+
+### 1. ติดตั้ง PyInstaller
+```bash
+pip install pyinstaller
+```
+
+### ตรวจสอบว่า install สำเร็จ
+```bash
+pyinstaller --version
+```
+
+### 2. สร้าง .exe (เข้าไปโฟลเดอร์โปรเจกต์)
+```bash
+pyinstaller --onefile --windowed main_xxxx.py
+```
+--onefile → รวมทุกอย่างเป็นไฟล์เดียว
+--windowed → ไม่เปิด console (เหมาะกับ GUI)
+
+### ถ้าต้องการไอคอน
+```bash
+pyinstaller --onefile --windowed --icon=app_icon.ico main_xxxx.py
+```
+

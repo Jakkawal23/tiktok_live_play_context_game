@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton,
     QTextEdit, QVBoxLayout, QHBoxLayout, QCheckBox
 )
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, pyqtSignal  
+from PyQt5.QtGui import QFont
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent
 from pynput.keyboard import Controller, Key
@@ -16,21 +17,24 @@ import random
 # ----------------------
 # ฟังก์ชันช่วยเหลือ
 # ----------------------
-def clean_thai(text):
+def clean_text(text):
     # return re.sub(r'[^ก-๙0-9\s]+', '', text)
-    return re.sub(r'[^\u0E00-\u0E7F0-9\s]+', '', text)
+    # return re.sub(r'[^\u0E00-\u0E7F0-9\s]+', '', text)
+    pattern = r'[ก-๙a-zA-Z0-9_\s]+'
+    matches = re.findall(pattern, text)
+    return ''.join(matches)
 
 # ----------------------
 # Typing Thread
 # ----------------------
 class TypingThread(threading.Thread):
-    def __init__(self, comment_queue, prefix_enabled=False, prefix_str=""):
+    def __init__(self, comment_queue):
         super().__init__()
         self.comment_queue = comment_queue
         self.keyboard = Controller()
         self.running = False
-        self.prefix_enabled = prefix_enabled
-        self.prefix_str = prefix_str
+        self.prefix_enabled = False
+        self.prefix_str = ""
 
     def start_typing(self, prefix_enabled=False, prefix_str=""):
         self.prefix_enabled = prefix_enabled
@@ -51,33 +55,35 @@ class TypingThread(threading.Thread):
                     text = text[len(self.prefix_str):]  # ตัด prefix ออก
                 for char in text:
                     self.keyboard.type(char)
-                    # delay สั้น ๆ เพื่อให้เหมือนคนพิมพ์
-                    time.sleep(random.uniform(0.05, 0.15))  # 50-150 ms ต่อแต่ละตัว
+                    time.sleep(random.uniform(0.05, 0.15))  # typing like human
                 self.keyboard.press(Key.enter)
                 self.keyboard.release(Key.enter)
                 time.sleep(0.1)
             else:
                 time.sleep(0.1)
 
+
 # ----------------------
 # TikTok Listener Thread
 # ----------------------
 class TikTokListener(threading.Thread):
-    def __init__(self, unique_id, display_callback):
+    def __init__(self, unique_id, gui_callback, typing_queue):
         super().__init__()
         self.client = TikTokLiveClient(unique_id=unique_id)
-        self.display_callback = display_callback
+        self.gui_callback = gui_callback      # สำหรับ GUI แสดงข้อความ
+        self.typing_queue = typing_queue      # สำหรับส่งข้อความให้ TypingThread
         self.running = True
-        self.new_comment_callback = None  # จะใช้สำหรับส่ง comment ให้ TypingThread
 
         @self.client.on(CommentEvent)
         async def on_comment(event: CommentEvent):
-            if self.running:
-                text = clean_thai(event.comment).strip()
-                if text:
-                    self.display_callback(event.user.nickname, text)
-                    if self.new_comment_callback is not None:
-                        self.new_comment_callback(text)  # ส่งให้ TypingThread
+            text = event.comment.strip()
+            if text:
+                # ส่งข้อความให้ GUI แสดง
+                self.gui_callback(event.user.nickname, text)
+                # ส่งข้อความให้ TypingThread
+                self.typing_queue.put(text)
+
+
 
     def run(self):
         self.client.run()
@@ -85,20 +91,25 @@ class TikTokListener(threading.Thread):
     def stop(self):
         self.running = False
 
+
 # ----------------------
 # GUI
 # ----------------------
 class TikTokGUI(QWidget):
+    new_comment_signal = pyqtSignal(str, str)  # nickname, text
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TikTok Live Auto Typer")
         self.comment_queue = queue.Queue()
 
+        # Thread
         self.listener_thread = None
         self.typing_thread = TypingThread(self.comment_queue)
         self.typing_thread.daemon = True
         self.typing_thread.start()
 
+        # GUI Layout
         layout = QVBoxLayout()
 
         # Unique ID input
@@ -146,8 +157,11 @@ class TikTokGUI(QWidget):
 
         self.setLayout(layout)
 
+        # Signal
+        self.new_comment_signal.connect(self.display_comment)
+
     # ----------------------
-    # Methods
+    # Display comment (main thread)
     # ----------------------
     def display_comment(self, nickname, text):
         display_text = f"{nickname}: {text}\n"
@@ -160,20 +174,16 @@ class TikTokGUI(QWidget):
     # ----------------------
     def toggle_listener(self):
         if self.listener_thread is None:
-            # Start Listener
             uid = self.entry_uid.text().strip()
             if not uid:
                 return
-            self.listener_thread = TikTokListener(uid, self.display_comment)
-            # ตั้ง callback ให้ TypingThread รับ comment ใหม่
-            self.listener_thread.new_comment_callback = lambda txt: self.comment_queue.put(txt)
+            self.listener_thread = TikTokListener(uid, self.new_comment_signal.emit, self.comment_queue)
             self.listener_thread.daemon = True
             self.listener_thread.start()
             self.btn_listener.setText("Stop Listener")
             self.btn_listener.setStyleSheet("background-color: red; color: white")
             self.status_label.setText("Status: Listener On")
         else:
-            # Stop Listener
             self.listener_thread.stop()
             self.listener_thread = None
             self.btn_listener.setText("Start Listener")
@@ -184,7 +194,6 @@ class TikTokGUI(QWidget):
     # Typing control
     # ----------------------
     def start_typing_countdown(self):
-        # ล้างคิวเก่าก่อน
         while not self.comment_queue.empty():
             self.comment_queue.get()
         self.btn_start_typing.hide()
@@ -200,7 +209,6 @@ class TikTokGUI(QWidget):
             self.status_label.setText(f"Status: Typing starts in {self.countdown} seconds...")
         else:
             self.timer.stop()
-            # เริ่มพิมพ์ โดยตรวจ prefix
             prefix_enabled = self.prefix_checkbox.isChecked()
             prefix_str = self.prefix_input.text().strip() if prefix_enabled else ""
             self.typing_thread.start_typing(prefix_enabled, prefix_str)
@@ -213,11 +221,13 @@ class TikTokGUI(QWidget):
         self.btn_stop_typing.hide()
         self.btn_start_typing.show()
 
+
 # ----------------------
 # Run App
 # ----------------------
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setFont(QFont("Tahoma", 10)) 
     gui = TikTokGUI()
     gui.show()
     sys.exit(app.exec_())

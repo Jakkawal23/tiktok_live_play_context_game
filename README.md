@@ -95,13 +95,16 @@ pyinstaller --version
 
 ### 2. สร้าง .exe (เข้าไปโฟลเดอร์โปรเจกต์)
 ```bash
-pyinstaller --onefile --windowed main_xxxx.py
+pyinstaller --onefile --windowed --name "TikTokAutoTyper" --icon="C:\path\to\icon.ico" main_pyautogui_gui.py
 ```
---onefile → รวมทุกอย่างเป็นไฟล์เดียว
---windowed → ไม่เปิด console (เหมาะกับ GUI)
+- `--onefile` → รวมทุกอย่างเป็นไฟล์เดียว
+- `--windowed` → ไม่เปิด console (เหมาะกับ GUI)
+- `--name` → ตั้งชื่อไฟล์ .exe
+- `--icon` → ใส่ไอคอน
+
 
 ### ถ้าต้องการไอคอน
 ```bash
-pyinstaller --onefile --windowed --icon=app_icon.ico main_xxxx.py
+pyinstaller --onefile --windowed --icon=app_icon.ico main_pyautogui_gui.py
 ```
 

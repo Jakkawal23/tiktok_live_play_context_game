@@ -2,7 +2,7 @@ from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, GiftEvent, ConnectEvent
 
 # Change username
-client = TikTokLiveClient(unique_id="@channlename")
+client = TikTokLiveClient(unique_id="@famer0012")
 
 @client.on(ConnectEvent)
 async def on_connect(event: ConnectEvent):

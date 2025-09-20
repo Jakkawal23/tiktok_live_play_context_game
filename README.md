@@ -24,9 +24,24 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### 4. รันโปรแกรม
+### 4. รันโปรแกรม Connect to live
 ```bash
 python main.py
+```
+
+### รันด้วย pyautogui
+```bash
+python main_pyautogui.py
+```
+
+### รันด้วย pyautogui แสดง gui
+```bash
+python main_pyautogui_gui.py
+```
+
+### รันด้วย selenium
+```bash
+python main_selenium.py
 ```
 
 ## macOS / Linux
@@ -46,7 +61,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. รันโปรแกรม
+### 4. รันโปรแกรม Connect to live
 ```bash
-python main.py  
+python main.py
+```
+
+### รันด้วย pyautogui
+```bash
+python main_pyautogui.py
+```
+
+### รันด้วย pyautogui แสดง gui
+```bash
+python main_pyautogui_gui.py
+```
+
+### รันด้วย selenium
+```bash
+python main_selenium.py
 ```

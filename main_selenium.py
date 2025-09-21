@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QVBoxLayout, QHBoxLayout, QCheckBox, QSpinBox
 )
 from PyQt5.QtCore import QTimer, pyqtSignal , Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QIcon
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, ConnectEvent, DisconnectEvent
 from pynput.keyboard import Controller, Key
@@ -117,166 +117,133 @@ class TypingThread(threading.Thread):
     def run(self):
         while True:
             if self.running and not self.comment_queue.empty():
-                text = self.comment_queue.get()
-                text_to_type = clean_text(text)
-                
-                # filter by GUI
-                if hasattr(self, "gui"):
-                    text_to_type = filter_by_group(text_to_type, self.gui)
-                
-                # ตรวจสอบว่า input field ยังพร้อมใช้งานอยู่หรือไม่
+                # ตรวจสอบ input field ก่อน get ข้อความ
                 if hasattr(self, "gui") and self.gui.input_field_found:
+                    text = self.comment_queue.get()
+                    # Apply clean_text ทุกกรณี
+                    text_to_type = clean_text(text)
+                    # Apply prefix เฉพาะเมื่อเลือก checkbox
+                    if getattr(self, "prefix_enabled", False) and self.prefix_str:
+                        text_to_type = f"{self.prefix_str}{text_to_type}"
+                    # ตรวจสอบว่าเป็น admin message หรือไม่
+                    is_admin_message = text.startswith("🔧 ADMIN:")
+                    if is_admin_message:
+                        text_to_type = text.replace("🔧 ADMIN:", "").strip()
+                    # Apply group filter เฉพาะเมื่อเลือก checkbox
+                    if hasattr(self, "gui") and (
+                        self.gui.group_thai_checkbox.isChecked() or
+                        self.gui.group_english_checkbox.isChecked() or
+                        self.gui.group_number_checkbox.isChecked() or
+                        self.gui.group_special_checkbox.isChecked()
+                    ):
+                        text_to_type = filter_by_group(text_to_type, self.gui)
+                    # Apply blacklist เฉพาะเมื่อเลือก checkbox
+                    if getattr(self, "blacklist_enabled", False) and getattr(self, "blacklist_str", ""):
+                        text_to_type = apply_blacklist(text_to_type, self.blacklist_str)
+                    # Remove space เฉพาะเมื่อเลือก checkbox
+                    if getattr(self, "remove_space_enabled", False):
+                        text_to_type = text_to_type.replace(" ", "")
                     try:
-                        # ตรวจสอบ input field ก่อนพิมพ์
                         selector = self.gui.entry_selector.text().strip() or 'input[name="word"]'
                         input_element = self.gui.driver.find_element(By.CSS_SELECTOR, selector)
-                        
-                        # ตรวจสอบว่า element พร้อมใช้งานหรือไม่
                         if not input_element.is_displayed():
                             print("Input field not displayed")
                             self.gui.input_field_fail_count += 1
                             if self.gui.input_field_fail_count >= 3:
                                 self.gui.stop_typing_signal.emit()
+                            # put text back to queue
+                            self.comment_queue.put(text)
+                            time.sleep(0.5)
                             continue
-                            
                         if not input_element.is_enabled():
                             print("Input field not enabled")
                             self.gui.input_field_fail_count += 1
                             if self.gui.input_field_fail_count >= 3:
                                 self.gui.stop_typing_signal.emit()
+                            # put text back to queue
+                            self.comment_queue.put(text)
+                            time.sleep(0.5)
                             continue
-                        
-                        # ตรวจสอบว่า element สามารถ interact ได้หรือไม่
-                        try:
-                            # ลอง scroll ไปหา element
-                            self.gui.driver.execute_script("arguments[0].scrollIntoView(true);", input_element)
-                            time.sleep(0.1)
-                            
-                            # ตรวจสอบว่า element อยู่ใน viewport
-                            is_in_viewport = self.gui.driver.execute_script(
-                                "var rect = arguments[0].getBoundingClientRect();"
-                                "return (rect.top >= 0 && rect.left >= 0 && "
-                                "rect.bottom <= window.innerHeight && rect.right <= window.innerWidth);",
-                                input_element
-                            )
-                            
-                            if not is_in_viewport:
-                                print("Input field not in viewport, scrolling...")
-                                self.gui.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", input_element)
-                                time.sleep(0.2)
-                            
-                            # ตรวจสอบว่า element ถูกบังหรือไม่
-                            is_clickable = self.gui.driver.execute_script(
-                                "var rect = arguments[0].getBoundingClientRect();"
-                                "var element = document.elementFromPoint(rect.left + rect.width/2, rect.top + rect.height/2);"
-                                "return element === arguments[0];",
-                                input_element
-                            )
-                            
-                            if not is_clickable:
-                                print("Input field is covered by another element")
-                                self.gui.input_field_fail_count += 1
-                                if self.gui.input_field_fail_count >= 3:
-                                    self.gui.stop_typing_signal.emit()
-                                continue
-                                
-                        except Exception as e:
-                            print(f"Error checking element interactability: {e}")
-                            self.gui.input_field_fail_count += 1
-                            if self.gui.input_field_fail_count >= 3:
-                                self.gui.stop_typing_signal.emit()
-                            continue
-                        
-                        # รีเซ็ตตัวนับเมื่อสำเร็จ
+                        # ...existing code for clickability check...
                         self.gui.input_field_fail_count = 0
-                        
-                        # ตรวจสอบว่า input field พร้อมรับค่าใหม่หรือไม่
                         is_readonly = input_element.get_attribute("readonly")
                         is_disabled = input_element.get_attribute("disabled")
-                        
                         if is_readonly or is_disabled:
                             print("Input field is readonly or disabled, waiting...")
-                            time.sleep(0.5)  # รอ 0.5 วินาที
+                            # put text back to queue
+                            self.comment_queue.put(text)
+                            time.sleep(0.5)
                             continue
-                        
-                        # ตรวจสอบว่า input field พร้อมรับค่าใหม่หรือไม่
                         current_value = input_element.get_attribute("value")
                         if current_value and current_value.strip():
-                            # ถ้ามีค่าเก่าอยู่ ให้ลบออกก่อน
-                            print(f"Clearing old value: '{current_value}'")
-                            
-                            # ลองใช้ clear() ก่อน
+                            print(f"Clearing old value in input field: '{current_value}'")
                             input_element.clear()
-                            time.sleep(0.1)  # รอให้ clear เสร็จ
-                            
-                            # ตรวจสอบอีกครั้งว่าลบแล้วจริงหรือไม่
+                            time.sleep(0.1)
                             remaining_value = input_element.get_attribute("value")
                             if remaining_value and remaining_value.strip():
-                                # ถ้ายังมีค่าเหลือ ให้ใช้ Ctrl+A แล้ว Delete
                                 print(f"Still has value after clear: '{remaining_value}', using Ctrl+A+Delete")
                                 input_element.send_keys(Keys.CONTROL + "a")
                                 input_element.send_keys(Keys.DELETE)
                                 time.sleep(0.1)
-                                
-                                # ตรวจสอบอีกครั้ง
                                 final_value = input_element.get_attribute("value")
                                 if final_value and final_value.strip():
                                     print(f"Still has value after Ctrl+A+Delete: '{final_value}', trying backspace")
-                                    # ลองใช้ backspace หลายครั้ง
                                     for _ in range(len(final_value) + 5):
                                         input_element.send_keys(Keys.BACKSPACE)
                                     time.sleep(0.1)
-                        
-                        # ตรวจสอบอีกครั้งว่า input field พร้อมหรือไม่
                         final_check = input_element.get_attribute("value")
                         if final_check and final_check.strip():
                             print(f"Input field still has value: '{final_check}', skipping this input")
+                            # put text back to queue
+                            self.comment_queue.put(text)
+                            time.sleep(0.5)
                             continue
-                        
-                        # พิมพ์ข้อความใหม่
+                        if getattr(self, "pre_delay_enabled", False):
+                            time.sleep(getattr(self, "pre_delay_ms", 0) / 1000.0)
                         print(f"Typing new value: '{text_to_type}'")
-                        
-                        # คำนวณความเร็วตามจำนวนคิว
                         queue_size = self.comment_queue.qsize()
                         if queue_size > 10:
-                            char_delay = random.uniform(0.01, 0.03)  # เร็วมาก
-                            enter_delay = random.uniform(0.1, 0.2)
+                            char_delay = random.uniform(0.005, 0.015)
+                            enter_delay = random.uniform(0.05, 0.1)
                         elif queue_size > 5:
-                            char_delay = random.uniform(0.02, 0.05)  # เร็ว
-                            enter_delay = random.uniform(0.15, 0.3)
+                            char_delay = random.uniform(0.01, 0.025)
+                            enter_delay = random.uniform(0.08, 0.15)
                         else:
-                            char_delay = random.uniform(0.03, 0.08)  # ปกติ
-                            enter_delay = random.uniform(0.2, 0.4)
-                        
-                        # พิมพ์ทีละตัวอักษรพร้อม delay
+                            char_delay = random.uniform(0.015, 0.035)
+                            enter_delay = random.uniform(0.1, 0.2)
                         for char in text_to_type:
                             input_element.send_keys(char)
                             time.sleep(char_delay)
-                        
-                        # delay ก่อน enter
                         time.sleep(enter_delay)
-                        input_element.send_keys("\n")  # enter
-                        
+                        try:
+                            input_element.send_keys("\n")
+                        except:
+                            try:
+                                input_element.send_keys(Keys.RETURN)
+                            except:
+                                pass
+                        if getattr(self, "post_delay_enabled", False):
+                            time.sleep(getattr(self, "post_delay_ms", 0) / 1000.0)
+                        # Discard pending_messages เฉพาะเมื่อเปิด duplicate filter
+                        if hasattr(self, "gui") and hasattr(self.gui.listener_thread, "duplicate_enabled"):
+                            if self.gui.listener_thread.duplicate_enabled:
+                                if text in self.gui.listener_thread.pending_messages:
+                                    self.gui.listener_thread.pending_messages.discard(text)
                     except Exception as e:
-                        # เพิ่มตัวนับการล้มเหลว
                         self.gui.input_field_fail_count += 1
                         print(f"Input field error (attempt {self.gui.input_field_fail_count}): {e}")
-                        
-                        # หยุดการพิมพ์เฉพาะเมื่อล้มเหลว 3 ครั้งติดต่อกัน
-                        if self.gui.input_field_fail_count >= 3:
-                            print("Input field not available, stopping typing...")
+                        if self.gui.input_field_fail_count >= 5:
+                            print("Input field not available after 5 attempts, stopping typing...")
                             self.gui.stop_typing_signal.emit()
+                        # put text back to queue
+                        self.comment_queue.put(text)
+                        time.sleep(0.5)
                         continue
                 else:
-                    # fallback พิมพ์ด้วย pynput
-                    for char in text_to_type:
-                        self.keyboard.type(char)
-                        time.sleep(random.uniform(0.05, 0.15))
-                    self.keyboard.press(Key.enter)
-                    self.keyboard.release(Key.enter)
-
+                    # input field ยังไม่เจอ ให้รอ ไม่ต้อง get ข้อความออกจาก queue
+                    time.sleep(0.2)
             else:
-                time.sleep(0.1)  # รอถ้าไม่พิมพ์
+                time.sleep(0.1)
 
 # ----------------------
 # TikTok Listener Thread
@@ -310,23 +277,29 @@ class TikTokListener(threading.Thread):
             if not text:
                 return
 
-            self.gui_callback(event.user.nickname, text)  # แสดงใน GUI
+            # แสดงในช่องแชททุกครั้ง
+            self.gui_callback(event.user.nickname, text)
 
-            # Max length filter
-            maxlen_enabled = getattr(self, 'maxlen_enabled', False)
-            maxlen = getattr(self, 'maxlen_value', 2000)
-            if maxlen_enabled and len(text) > maxlen:
-                return
+            # เฉพาะตอนที่กำลังพิมพ์ถึงจะใส่เข้า queue
+            if hasattr(self, 'typing_thread') and getattr(self.typing_thread, 'running', False):
+                maxlen_enabled = getattr(self, 'maxlen_enabled', False)
+                maxlen = getattr(self, 'maxlen_value', 2000)
+                if maxlen_enabled and len(text) > maxlen:
+                    return
 
-            # Duplicate filter
-            duplicate_enabled = getattr(self, 'duplicate_enabled', False)
-            if duplicate_enabled and text in self.pending_messages:
-                return
+                duplicate_enabled = getattr(self, 'duplicate_enabled', False)
+                if duplicate_enabled:
+                    if text in self.pending_messages:
+                        print(f"Duplicate message filtered: '{text}'")
+                        return
+                    self.pending_messages.add(text)
 
-            # ส่งข้อความเข้า Queue
-            self.typing_queue.put(text)
-            if duplicate_enabled:
-                self.pending_messages.add(text)
+                if self.typing_queue is not None:
+                    self.typing_queue.put(text)
+                    if duplicate_enabled:
+                        self.pending_messages.add(text)
+                    else:
+                        print(f"Message added to queue: '{text}'")
 
         @self.client.on(ConnectEvent)
         async def on_connect(event: ConnectEvent):
@@ -349,24 +322,21 @@ class TikTokListener(threading.Thread):
         try:
             self.task = self.loop.create_task(self.client.run())
             while self.running and not self.task.done():
-                # ตรวจ loop ทุก 0.1 วินาที
                 self.loop.run_until_complete(asyncio.sleep(0.1))
         except Exception as e:
             self.status_callback("failed")
             print("Listener error:", e)
         finally:
-            if not self.client._closed:
+            try:
                 self.loop.run_until_complete(self.client.close())
+            except Exception as e:
+                print(f"Error closing TikTokLiveClient: {e}")
             self.loop.close()
 
     def stop(self):
-        """
-        หยุด Listener และปิด event loop
-        """
         self.running = False
         if self.loop and not self.loop.is_closed():
-            asyncio.run_coroutine_threadsafe(self.client.close(), self.loop)
-
+            self.loop.call_soon_threadsafe(lambda: self.loop.create_task(self.client.close()))
 
 # ----------------------
 # GUI
@@ -378,6 +348,7 @@ class TikTokGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TikTok Live Auto Typer")
+        self.setWindowIcon(QIcon("program_icon_1.ico"))
         self.comment_queue = queue.Queue()
 
         # -------------------
@@ -669,8 +640,10 @@ class TikTokGUI(QWidget):
         # แสดงข้อความใน chat พร้อมตกแต่ง
         self.display_admin_message(message)
         
-        # เพิ่มข้อความเข้าไปในคิวแทนการส่งตรง
-        self.comment_queue.put(message)
+        # เพิ่มข้อความเข้าไปในคิวพร้อม prefix admin
+        # Admin message ไม่ผ่าน duplicate filter
+        admin_message = f"🔧 ADMIN:{message}"
+        self.comment_queue.put(admin_message)
         
         # เคลียร์ input field
         self.entry_custom_message.clear()
@@ -719,6 +692,10 @@ class TikTokGUI(QWidget):
 
             # เคลียร์หน้าจอทุกครั้งก่อนเริ่ม
             self.text_area.clear()
+            
+            # เคลียร์ queue เก่า
+            while not self.comment_queue.empty():
+                self.comment_queue.get()
 
             # สร้าง listener
             self.listener_thread = TikTokListener(
@@ -727,6 +704,7 @@ class TikTokGUI(QWidget):
                 self.comment_queue,
                 self.update_listener_status
             )
+            self.listener_thread.typing_thread = self.typing_thread  # สำคัญ!
             self.listener_thread.daemon = True
             self.listener_thread.start()
 
@@ -735,9 +713,12 @@ class TikTokGUI(QWidget):
             self.status_label_listener.setText("Listener: Connecting...")
             self.btn_start_typing.setEnabled(False)
         else:
-            # กด Stop Listener
+            # กด Stop Listener - หยุดแค่รับข้อความจาก live แต่ยังคงส่งผ่าน admin ได้
             if self.listener_thread:
+                # หยุดการแสดงข้อความใน GUI
                 self.listener_thread.gui_callback = lambda n,t: None
+                # หยุดการส่งข้อความเข้า queue
+                self.listener_thread.typing_queue = None
                 self.listener_thread.stop()
                 self.listener_thread.join(timeout=2)
                 self.listener_thread = None
@@ -745,13 +726,16 @@ class TikTokGUI(QWidget):
             self.btn_listener.setText("Start Listener")
             self.btn_listener.setStyleSheet("background-color: green; color: white")
             self.status_label_listener.setText("Listener: Off")
-            self.btn_start_typing.setEnabled(False)
-            self.status_label_typing.setText("Typing: Idle")
-            self.stop_typing()
             
-            # ปิดเว็บถ้าเปิดอยู่
-            if self.driver:
-                self.close_web()
+            # ไม่หยุดการพิมพ์ - ให้ยังคงพิมพ์ admin ได้
+            # ไม่ปิดเว็บ - ให้ยังคงสามารถส่งข้อความผ่าน admin ได้
+            # เว็บจะยังคงเปิดอยู่และสามารถใช้ custom message ได้
+            if self.input_field_found:
+                self.btn_start_typing.setEnabled(True)
+                self.status_label_typing.setText("Typing: Ready (Admin only)")
+            else:
+                self.btn_start_typing.setEnabled(False)
+                self.status_label_typing.setText("Typing: Waiting for input field")
 
     def update_listener_status(self, status):
         """
@@ -828,23 +812,36 @@ class TikTokGUI(QWidget):
 
     def stop_typing(self):
         """
-        หยุดการพิมพ์
+        หยุดการพิมพ์ และเคลียร์ queue ทั้งหมด
         """
         self.typing_thread.stop_typing()
+        # เคลียร์ queue ทั้งหมด
+        while not self.comment_queue.empty():
+            try:
+                self.comment_queue.get(False)
+            except queue.Empty:
+                break
         self.status_label_typing.setText("Typing: Stopped")
         self.btn_stop_typing.hide()
         self.btn_start_typing.show()
 
-    
     def open_web(self):
         url = self.entry_url.text().strip()
         if not url:
+            self.status_label_typing.setText("Error: Please enter a valid URL")
             return
 
-        # ปิด driver เก่าถ้ามี
+        # ปิด driver เก่าถ้ามี (auto close when changing URL)
         if self.driver:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+                print("Closed previous web session")
+            except:
+                pass
             self.driver = None
+            self.input_field_found = False
+            self.btn_start_typing.setEnabled(False)
+            self.status_label_typing.setText("Web: Closed previous session")
 
         try:
             options = Options()
@@ -856,15 +853,59 @@ class TikTokGUI(QWidget):
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
             options.add_argument("--window-size=1920,1080")
+            options.add_argument("--disable-web-security")
+            options.add_argument("--allow-running-insecure-content")
+            options.add_argument("--disable-logging")
+            options.add_argument("--disable-gcm")
+            options.add_argument("--disable-background-networking")
+            options.add_argument("--disable-background-timer-throttling")
+            options.add_argument("--disable-renderer-backgrounding")
+            options.add_argument("--disable-backgrounding-occluded-windows")
+            options.add_argument("--disable-ipc-flooding-protection")
+            options.add_argument("--log-level=3")
+            options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            options.add_experimental_option('useAutomationExtension', False)
             
             self.driver = webdriver.Chrome(options=options)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            # ตั้งค่า timeout
+            self.driver.set_page_load_timeout(30)  # 30 วินาที
+            
+            self.status_label_typing.setText("Web: Loading...")
             self.driver.get(url)
             
+            # ตรวจสอบว่าโหลดสำเร็จหรือไม่
+            self.driver.implicitly_wait(2)  # ลดเวลารอลง
+            
+            # แสดงสถานะว่าโหลดเสร็จแล้ว
+            self.status_label_typing.setText("Web: Loaded - Checking for input field...")
+            
         except Exception as e:
-            print(f"Error opening web: {e}")
-            self.status_label_typing.setText(f"Web Error: {str(e)}")
-            self.driver = None
+            error_msg = str(e)
+            print(f"Error opening web: {error_msg}")
+            
+            # แสดง error message ที่เข้าใจง่าย
+            if "timeout" in error_msg.lower():
+                self.status_label_typing.setText("Web Error: Connection timeout - URL may be invalid or unreachable")
+            elif "chrome" in error_msg.lower():
+                self.status_label_typing.setText("Web Error: Chrome driver not found - Please install ChromeDriver")
+            elif "invalid" in error_msg.lower() or "malformed" in error_msg.lower():
+                self.status_label_typing.setText("Web Error: Invalid URL format")
+            else:
+                self.status_label_typing.setText(f"Web Error: {error_msg}")
+            
+            # ปิด driver ถ้าเปิดได้แต่มีปัญหา
+            if self.driver:
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+                self.driver = None
+            
+            # แสดงปุ่ม Open Web กลับมา
+            self.btn_open_web.show()
+            self.btn_close_web.hide()
             return
 
         # เริ่มตรวจสอบ input field แบบต่อเนื่อง
@@ -873,6 +914,9 @@ class TikTokGUI(QWidget):
         # แสดงปุ่ม Close Web และซ่อนปุ่ม Open Web
         self.btn_open_web.hide()
         self.btn_close_web.show()
+        
+        # แสดงสถานะว่าเปิดเว็บสำเร็จ
+        self.status_label_typing.setText("Web: Opened - Checking for input field...")
 
     def start_input_field_monitoring(self):
         """
@@ -882,14 +926,17 @@ class TikTokGUI(QWidget):
         self.btn_start_typing.setEnabled(False)
         self.status_label_typing.setText("Web: Checking for input field...")
         
-        # เริ่ม timer ตรวจสอบ input field ทุก 2 วินาที
+        # เริ่ม timer ตรวจสอบ input field ทุก 1 วินาที (เร็วขึ้น)
         self.input_check_timer = QTimer()
         self.input_check_timer.timeout.connect(self.check_input_field)
-        self.input_check_timer.start(2000)  # ตรวจสอบทุก 2 วินาที
+        self.input_check_timer.start(1000)  # ตรวจสอบทุก 1 วินาที
         
         # สร้าง timer ตรวจสอบเกมจบ (จะเริ่มเมื่อเริ่มพิมพ์)
         self.game_status_timer = QTimer()
         self.game_status_timer.timeout.connect(self.check_game_status)
+        
+        # ตรวจสอบทันทีครั้งแรก (ไม่ต้องรอ 1 วินาที)
+        QTimer.singleShot(100, self.check_input_field)
 
     def check_input_field(self):
         """
@@ -897,6 +944,16 @@ class TikTokGUI(QWidget):
         """
         if not self.driver:
             self.input_check_timer.stop()
+            return
+
+        # ใช้ QTimer.singleShot เพื่อให้ทำงานใน background
+        QTimer.singleShot(0, self._check_input_field_async)
+
+    def _check_input_field_async(self):
+        """
+        ตรวจสอบ input field แบบ async เพื่อไม่ให้ GUI ค้าง
+        """
+        if not self.driver:
             return
 
         try:
@@ -917,6 +974,12 @@ class TikTokGUI(QWidget):
             self.input_field_found = False
             self.btn_start_typing.setEnabled(False)
             self.status_label_typing.setText("Web: Waiting for game to load...")
+        except Exception as e:
+            # ถ้าเกิด error อื่นๆ ไม่ให้ GUI ค้าง
+            print(f"Input field check error: {e}")
+            self.input_field_found = False
+            self.btn_start_typing.setEnabled(False)
+            self.status_label_typing.setText("Web: Checking...")
 
     def check_game_status(self):
         """
@@ -930,15 +993,17 @@ class TikTokGUI(QWidget):
             selector = self.entry_selector.text().strip() or 'input[name="word"]'
             input_element = self.driver.find_element(By.CSS_SELECTOR, selector)
             if not input_element.is_displayed() or not input_element.is_enabled():
-                # ถ้า input field หายไป แสดงว่าเกมจบแล้ว
+                # ถ้า input field หายไป ให้แจ้งสถานะ แต่ไม่หยุดการพิมพ์
                 print("Game ended - input field no longer available")
-                self.stop_typing_signal.emit()
-                self.status_label_typing.setText("Game Ended: Auto stopped typing")
+                self.status_label_typing.setText("Game Ended: Waiting for input field...")
         except NoSuchElementException:
-            # ถ้าไม่เจอ input field แสดงว่าเกมจบแล้ว
+            # ถ้าไม่เจอ input field ให้แจ้งสถานะ แต่ไม่หยุดการพิมพ์
             print("Game ended - input field not found")
-            self.stop_typing_signal.emit()
-            self.status_label_typing.setText("Game Ended: Auto stopped typing")
+            self.status_label_typing.setText("Game Ended: Waiting for input field...")
+        except Exception as e:
+            # ถ้าเกิด error อื่นๆ (เช่น Chrome error) ไม่ให้หยุดการทำงาน
+            print(f"Game status check error (ignoring): {e}")
+            # ไม่หยุดการทำงาน
 
     def stop_typing(self):
         self.typing_thread.stop_typing()

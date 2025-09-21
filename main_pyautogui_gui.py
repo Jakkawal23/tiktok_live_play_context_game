@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QVBoxLayout, QHBoxLayout, QCheckBox, QSpinBox
 )
 from PyQt5.QtCore import QTimer, pyqtSignal , Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QIcon
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, ConnectEvent, DisconnectEvent
 from pynput.keyboard import Controller, Key
@@ -265,6 +265,7 @@ class TikTokGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TikTok Live Auto Typer")
+        self.setWindowIcon(QIcon("program_icon.ico"))
         self.comment_queue = queue.Queue()
 
         # -------------------

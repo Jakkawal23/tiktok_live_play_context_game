@@ -160,3 +160,19 @@ python main_selenium.py
 - ต้องมี ChromeDriver ที่เข้ากันได้กับ Chrome version ที่ติดตั้ง
 - ระบบจะตรวจสอบ input field ทุก 2 วินาที
 - เมื่อเกมจบ ระบบจะหยุดการพิมพ์อัตโนมัติ
+
+## Download .exe file for windows
+*   [ดาวน์โหลด TikTokAutoPlayGame_1.0.exe](https://github.com/Jakkawal23/tiktok_live_play_context_game/blob/a05cfd6f076825856cc2ffa0a787c8e51d564173/TikTokAutoPlayGame_1.0.exe)
+*   [ดาวน์โหลด TikTokAutoTyper_1.2.exe](https://github.com/Jakkawal23/tiktok_live_play_context_game/blob/a05cfd6f076825856cc2ffa0a787c8e51d564173/TikTokAutoTyper_1.2.exe)
+
+## Example web
+
+![Example](images/20250920_01.png)
+![Example](images/20250920_02.png)
+![Example](images/20250920_03.png)
+![Example](images/20250920_04.png)
+![Example](images/20250920_05.png)
+![Example](images/20250920_06.png)
+![Example](images/20250920_07.png)
+
+

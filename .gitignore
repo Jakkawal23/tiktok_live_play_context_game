@@ -2,7 +2,7 @@
 build/
 
 # Ignore all .ico files
-*.ico
+# *.ico
 
 # Ignore all .spec files
 *.spec

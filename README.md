@@ -161,6 +161,10 @@ python main_selenium.py
 - ระบบจะตรวจสอบ input field ทุก 2 วินาที
 - เมื่อเกมจบ ระบบจะหยุดการพิมพ์อัตโนมัติ
 
+## Download .exe file for windows
+*   [ดาวน์โหลด TikTokAutoPlayGame_1.0.exe](github.com)
+*   [ดาวน์โหลด TikTokAutoTyper_1.2.exe](github.com)
+
 ## Example web
 
 ![Example](images/20250920_01.png)
@@ -170,3 +174,5 @@ python main_selenium.py
 ![Example](images/20250920_05.png)
 ![Example](images/20250920_06.png)
 ![Example](images/20250920_07.png)
+
+

@@ -160,3 +160,13 @@ python main_selenium.py
 - ต้องมี ChromeDriver ที่เข้ากันได้กับ Chrome version ที่ติดตั้ง
 - ระบบจะตรวจสอบ input field ทุก 2 วินาที
 - เมื่อเกมจบ ระบบจะหยุดการพิมพ์อัตโนมัติ
+
+## Example web
+
+![Example](images/20250920_01.png)
+![Example](images/20250920_02.png)
+![Example](images/20250920_03.png)
+![Example](images/20250920_04.png)
+![Example](images/20250920_05.png)
+![Example](images/20250920_06.png)
+![Example](images/20250920_07.png)

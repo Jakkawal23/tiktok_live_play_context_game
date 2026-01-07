@@ -174,5 +174,3 @@ python main_selenium.py
 ![Example](images/20250920_05.png)
 ![Example](images/20250920_06.png)
 ![Example](images/20250920_07.png)
-
-

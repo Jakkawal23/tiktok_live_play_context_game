@@ -162,8 +162,8 @@ python main_selenium.py
 - เมื่อเกมจบ ระบบจะหยุดการพิมพ์อัตโนมัติ
 
 ## Download .exe file for windows
-*   [ดาวน์โหลด TikTokAutoPlayGame_1.0.exe](github.com)
-*   [ดาวน์โหลด TikTokAutoTyper_1.2.exe](github.com)
+*   [ดาวน์โหลด TikTokAutoPlayGame_1.0.exe](https://github.com/Jakkawal23/tiktok_live_play_context_game/blob/a05cfd6f076825856cc2ffa0a787c8e51d564173/TikTokAutoPlayGame_1.0.exe)
+*   [ดาวน์โหลด TikTokAutoTyper_1.2.exe](https://github.com/Jakkawal23/tiktok_live_play_context_game/blob/a05cfd6f076825856cc2ffa0a787c8e51d564173/TikTokAutoTyper_1.2.exe)
 
 ## Example web
 
